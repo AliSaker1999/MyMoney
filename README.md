@@ -1,56 +1,79 @@
-# Welcome to your Expo app 👋
+# My Money
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Offline-only personal finance app (Android first, iOS-compatible). USD and LBP, multiple
+accounts, reports, budgets, goals, debts, encrypted manual backups. There is no backend and no
+network access.
 
-## Get started
+- Architecture and decisions: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Current progress and next steps: [STATUS.md](STATUS.md)
 
-1. Install dependencies
+## Requirements
 
-   ```bash
-   npm install
-   ```
+- Node ≥ 22.15 (for `--use-system-ca`), JDK 17, Android SDK (`ANDROID_HOME` set), an Android
+  emulator or device
+- **Android NDK 27.1.12297006** (NDK r27b; the version React Native 0.88 pins) at
+  `%ANDROID_HOME%\ndk\27.1.12297006`. Check that `source.properties` there shows
+  `Pkg.Revision = 27.1.12297006`.
+- Development builds only. Expo Go is not supported because SQLCipher is native code.
 
-2. Start the app
+## Common commands (PowerShell)
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+npm install
+npm run android            # dev build + install on emulator/device (expo run:android)
+npm start                  # Metro for an installed dev build
+npm run verify             # typecheck + lint + all Jest projects
+npm run test:node          # logic / SQL / crypto tests (better-sqlite3)
+npm run test:rn            # component tests (jest-expo)
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+### Release build and privacy verification
 
-### Other setup steps
+```powershell
+.\scripts\build-android-release.ps1          # prebuild (production) + assembleRelease + verify-release
+.\scripts\build-android-release.ps1 -Spike   # same, with the M0 spike route included
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+`verify-release` fails on any permission outside the allowlist and names the dependency that
+added it.
 
-## Learn more
+## Corporate network (TLS inspection)
 
-To learn more about developing your project with Expo, look at the following resources:
+On networks that inspect TLS, the proxy re-signs HTTPS traffic with a corporate root CA. Windows
+trusts that CA, but Node and Java ship their own trust stores and don't. The symptoms are:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `npx expo install` → `self-signed certificate in certificate chain`
+- `gradlew` → `PKIX path building failed … unable to find valid certification path`
 
-## Join the community
+**Fix: make each tool use the Windows certificate store, per command or per shell.** Never turn
+verification off: no `NODE_TLS_REJECT_UNAUTHORIZED=0`, no `strict-ssl=false`, no
+trust-all Gradle settings.
 
-Join our community of developers creating universal apps.
+```powershell
+# Node / npm / Expo CLI (Node ≥ 22.15): trust the OS store for this shell
+$env:NODE_OPTIONS = "--use-system-ca"
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+# Gradle wrapper download (client JVM)
+$env:GRADLE_OPTS = "-Djavax.net.ssl.trustStoreType=Windows-ROOT"
+
+# Gradle build (daemon JVM: dependency downloads)
+cd android
+.\gradlew.bat assembleRelease `
+  "-Djavax.net.ssl.trustStoreType=Windows-ROOT" `
+  "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Djavax.net.ssl.trustStoreType=Windows-ROOT"
+```
+
+`scripts/build-android-release.ps1` sets all of this for its own process only.
+
+Notes:
+- `Windows-ROOT` exists only on Windows JVMs. Don't put it in a committed `gradle.properties`,
+  because it would break builds on macOS and Linux.
+- `android/` is generated by `expo prebuild`; don't hand-edit its `gradle.properties` either.
+- If a Gradle daemon was started without the flag, stop it first: `.\gradlew.bat --stop`.
+- **npm's `strict-ssl` must stay on (`true`, the default).** Check with
+  `npm config get strict-ssl`. If it is `false`, remove the override (`npm config delete strict-ssl`, or look for an
+  `npm_config_strict_ssl` environment variable) and use `--use-system-ca` instead.
+- Not every host is intercepted. On this network `registry.npmjs.org` verified fine with npm's
+  defaults, while Expo CLI's API calls and the Gradle/Maven downloads needed the OS store.
+
+Also set `EXPO_NO_TELEMETRY=1` in your environment.
