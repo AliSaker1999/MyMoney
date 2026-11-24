@@ -259,7 +259,10 @@ export default function NewTransactionScreen() {
             icon="swap-horizontal"
             helper={
               usingSuggestedRate && suggestedRate
-                ? t('ui.rateSuggested', { source: suggestedRate.sourceLabel, date: suggestedRate.effectiveDate })
+                ? t('ui.rateSuggested', {
+                    source: suggestedRate.sourceCode ? t(`rateSource.${suggestedRate.sourceCode}`) : suggestedRate.sourceLabel,
+                    date: suggestedRate.effectiveDate,
+                  })
                 : suggestedRate === null
                   ? t('ui.rateManual')
                   : undefined

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
 
-import { formatMoney, type Currency } from '@/domain/money';
+import { convertLbpToUsdMinor, formatMoney, type Currency } from '@/domain/money';
 import { AppText, type TextTone } from '@/ui/AppText';
 import { useReducedMotion } from '@/ui/layout';
 import { radius, spacing, useTokens, type TypeVariant } from '@/ui/theme';
@@ -45,6 +45,20 @@ export function compactNumber(value: number): string {
 
 function trim(value: number): string {
   return value >= 100 ? Math.round(value).toString() : value.toFixed(1).replace(/\.0$/, '');
+}
+
+/**
+ * LBP total → USD minor units for a display-only figure (e.g. combined net worth). The domain
+ * converter validates single entries (non-zero, bounded), which aggregate totals may not satisfy,
+ * so this never throws: zero converts to zero and anything else invalid returns null (hide it).
+ */
+export function lbpToUsdForDisplay(lbpMinor: bigint, rateE4: bigint): bigint | null {
+  if (lbpMinor === 0n) return 0n;
+  try {
+    return convertLbpToUsdMinor(lbpMinor, rateE4);
+  } catch {
+    return null;
+  }
 }
 
 export function minorToNumber(amountMinor: bigint, currency: Currency): number {

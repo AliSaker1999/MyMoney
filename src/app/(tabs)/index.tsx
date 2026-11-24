@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { useDatabase } from '@/db/DatabaseProvider';
-import { convertLbpToUsdMinor, formatRate } from '@/domain/money';
+import { formatRate } from '@/domain/money';
 import { getBudgetsByMonth } from '@/services/budgetService';
 import { getDashboard } from '@/services/dashboardService';
 import { listAccounts } from '@/services/ledgerSetupService';
@@ -27,6 +27,7 @@ import {
   IconAction,
   IconTile,
   ListGroup,
+  lbpToUsdForDisplay,
   ListRow,
   minorToNumber,
   moneyText,
@@ -91,7 +92,8 @@ export default function DashboardScreen() {
   // ---- Net worth (native currencies, plus a USD-equivalent total when a preferred rate exists).
   const usdNet = report.netWorthNative.find((item) => item.currency === 'USD')?.balanceMinor ?? 0n;
   const lbpNet = report.netWorthNative.find((item) => item.currency === 'LBP')?.balanceMinor ?? 0n;
-  const combined = report.netWorthRate ? usdNet + convertLbpToUsdMinor(lbpNet, report.netWorthRate) : null;
+  const lbpAsUsd = report.netWorthRate ? lbpToUsdForDisplay(lbpNet, report.netWorthRate) : null;
+  const combined = lbpAsUsd === null ? null : usdNet + lbpAsUsd;
 
   // ---- This month, in USD equivalent.
   const sumKind = (kind: 'income' | 'expense' | 'refund') =>

@@ -40,7 +40,7 @@ export function useAppSecuritySettings(): AppSecurityContextValue {
 }
 
 export function AppSecurityGate({ children }: PropsWithChildren) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [settings, setSettings] = useState<DeviceSettings | null>(null);
   const [locked, setLocked] = useState(true);
   const [privacyVisible, setPrivacyVisible] = useState(false);
@@ -89,13 +89,15 @@ export function AppSecurityGate({ children }: PropsWithChildren) {
       })
       .catch((cause: unknown) => {
         if (!active) return;
-        setError(errorMessage(cause, t('common.error')));
+        setError(errorMessage(cause, i18n.t('common.error')));
       });
 
     return () => {
       active = false;
     };
-  }, [t]);
+    // Load once. Depending on `t` caused an endless reload loop: loading applies the saved
+    // language, which changes `t`, which re-ran this effect and discarded the result.
+  }, [i18n]);
 
   useEffect(() => {
     if (!settings) return;

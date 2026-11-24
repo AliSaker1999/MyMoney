@@ -1,6 +1,6 @@
 import '@/i18n';
 
-import { LocaleProvider, Stack } from 'expo-router';
+import { LocaleProvider, Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { normalizeLanguage } from '@/i18n/language';
 import { AppSecurityGate } from '@/security/AppSecurityGate';
 import { DatabaseProvider } from '@/db/DatabaseProvider';
+import { AppButton } from '@/ui/controls';
+import { StatusScreen } from '@/ui/StatusScreen';
 import { darkTheme, lightTheme } from '@/ui/theme';
 
 export default function RootLayout() {
@@ -44,6 +46,24 @@ export default function RootLayout() {
           </DatabaseProvider>
         </AppSecurityGate>
       </LocaleProvider>
+    </PaperProvider>
+  );
+}
+
+/**
+ * Last-resort screen for unexpected rendering errors: the app stays open and the user can retry,
+ * instead of the process being killed. Rendered outside RootLayout, so it brings its own theme.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const scheme = useColorScheme();
+  const { t } = useTranslation();
+  return (
+    <PaperProvider theme={scheme === 'dark' ? darkTheme : lightTheme}>
+      <StatusScreen icon="alert-circle-outline" tint="negative" title={t('common.error')} message={error.message}>
+        <AppButton icon="refresh" onPress={() => void retry()}>
+          {t('security.retry')}
+        </AppButton>
+      </StatusScreen>
     </PaperProvider>
   );
 }

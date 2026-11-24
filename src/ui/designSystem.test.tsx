@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { resources } from '@/i18n/resources';
 import { ChoiceChips, SegmentedControl } from '@/ui/controls';
 import { shiftMonth } from '@/ui/domain';
-import { compactNumber, moneyText } from '@/ui/money';
+import { compactNumber, lbpToUsdForDisplay, moneyText } from '@/ui/money';
 import { darkTheme, lightTheme } from '@/ui/theme';
 
 const LRI = '⁦';
@@ -95,5 +95,18 @@ describe('selection controls', () => {
     expect(onChange).toHaveBeenLastCalledWith(null);
     fireEvent.press(screen.getByLabelText('Beta'));
     expect(onChange).toHaveBeenLastCalledWith('b');
+  });
+});
+
+describe('display-safe conversion', () => {
+  it('treats a zero LBP total as zero instead of throwing', () => {
+    expect(lbpToUsdForDisplay(0n, 895_000_000n)).toBe(0n);
+  });
+  it('converts non-zero totals at the given rate', () => {
+    // 895,000 LBP at 89,500.0000 LBP/USD = $10.00
+    expect(lbpToUsdForDisplay(895_000n, 895_000_000n)).toBe(1_000n);
+  });
+  it('returns null for totals the entry converter cannot represent', () => {
+    expect(lbpToUsdForDisplay(10n ** 30n, 895_000_000n)).toBeNull();
   });
 });
