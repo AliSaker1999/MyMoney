@@ -9,8 +9,8 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 const variant = process.env.APP_VARIANT === 'production' ? 'production' : 'development';
 const isProduction = variant === 'production';
 
-// Provisional application id. Confirm before the first Play Store upload (it cannot change afterwards).
-const APP_ID = 'app.mymoney';
+// Permanent application id (owner-confirmed 2026-11-24). Never change it: installs and data are tied to it.
+const APP_ID = 'com.alisaker.mymoney';
 
 /** Permissions that must never appear in a release build. */
 const BLOCKED_IN_PRODUCTION = [
@@ -20,17 +20,16 @@ const BLOCKED_IN_PRODUCTION = [
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'android.permission.VIBRATE',
-  // expo-screen-capture declares these for its screenshot *listener*, which we don't use.
-  // FLAG_SECURE (preventScreenCaptureAsync) does not need them.
+  // The screenshot listener does not use broad media access. Android requires
+  // DETECT_SCREEN_CAPTURE to register the callback when expo-screen-capture loads.
   'android.permission.READ_MEDIA_IMAGES',
-  'android.permission.DETECT_SCREEN_CAPTURE',
 ];
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'My Money',
   slug: 'mymoney',
-  version: '0.1.0',
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'mymoney',
@@ -42,9 +41,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: APP_ID,
+    // Must increase with every release that users can install over an earlier one.
+    versionCode: 2,
     allowBackup: false,
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
+      backgroundColor: '#0C3B31',
       foregroundImage: './assets/images/android-icon-foreground.png',
       backgroundImage: './assets/images/android-icon-background.png',
       monochromeImage: './assets/images/android-icon-monochrome.png',
@@ -57,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#208AEF',
+        backgroundColor: '#0C3B31',
         image: './assets/images/splash-icon.png',
         imageWidth: 76,
       },
@@ -70,6 +71,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     '@react-native-community/datetimepicker',
     // Must run after expo-secure-store.
     './plugins/withAndroidPrivacy',
+    // Signs release builds with the owner's upload key (kept outside the repo).
+    './plugins/withReleaseSigning',
   ],
   extra: {
     appVariant: variant,

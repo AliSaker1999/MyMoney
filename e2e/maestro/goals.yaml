@@ -1,0 +1,51 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Goals flow
+
+- tapOn:
+    text: More
+- wait:
+    duration: 500
+
+- tapOn:
+    text: Goals
+- wait:
+    duration: 1000
+
+# Create goal
+- tapOn:
+    text: Create new goal
+- wait:
+    duration: 500
+
+# Fill form
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 0
+- inputText: "Vacation Fund"
+- wait:
+    duration: 300
+
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 1
+- inputText: "5000.00"
+- wait:
+    duration: 300
+
+- tapOn:
+    text: Create new goal
+- wait:
+    duration: 1000
+
+# Verify goal created
+- assertVisible:
+    text: Vacation Fund

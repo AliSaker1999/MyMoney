@@ -1,0 +1,58 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Debts flow
+
+- tapOn:
+    text: More
+- wait:
+    duration: 500
+
+- tapOn:
+    text: Debts
+- wait:
+    duration: 1000
+
+# Create debt
+- tapOn:
+    text: Create new debt
+- wait:
+    duration: 500
+
+# Fill form
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 0
+- inputText: "Ali"
+- wait:
+    duration: 300
+
+# Select I Owe
+- tapOn:
+    text: I owe
+- wait:
+    duration: 300
+
+# Set date
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 1
+- inputText: "2026-11-18"
+- wait:
+    duration: 300
+
+- tapOn:
+    text: Create new debt
+- wait:
+    duration: 1000
+
+# Verify debt created
+- assertVisible:
+    text: Ali

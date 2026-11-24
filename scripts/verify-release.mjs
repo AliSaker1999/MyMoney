@@ -10,6 +10,7 @@
  *   2. android:allowBackup=false, plus dataExtractionRules and fullBackupContent pointing at our rules.
  *   3. No usesCleartextTraffic=true and no networkSecurityConfig.
  *   4. The app is not debuggable.
+ *   5. The APK is signed with a release key, not the shared Android debug keystore.
  * Exit code 1 on any failure.
  */
 import { execFileSync } from 'node:child_process';
@@ -37,6 +38,17 @@ function findAapt2() {
   throw new Error('aapt2 not found in build-tools');
 }
 
+function findApksigner() {
+  const sdk = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT;
+  const bt = path.join(sdk, 'build-tools');
+  const versions = fs.readdirSync(bt).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  for (const v of versions) {
+    const exe = path.join(bt, v, process.platform === 'win32' ? 'apksigner.bat' : 'apksigner');
+    if (fs.existsSync(exe)) return exe;
+  }
+  throw new Error('apksigner not found in build-tools');
+}
+
 const aapt2 = findAapt2();
 const run = (...args) => execFileSync(aapt2, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
@@ -52,6 +64,7 @@ if (!pkg) throw new Error('could not read package name');
 const ALLOWED = new Set([
   'android.permission.USE_BIOMETRIC', // expo-local-authentication
   'android.permission.USE_FINGERPRINT', // expo-local-authentication (API < 28)
+  'android.permission.DETECT_SCREEN_CAPTURE', // required by expo-screen-capture's Android callback
   `${pkg}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, // androidx.core, app-private signature permission
 ]);
 
@@ -113,6 +126,23 @@ check(!cleartext || /false|0x0\b/.test(cleartext), 'no cleartext traffic', `uses
 check(attr('networkSecurityConfig') === undefined, 'no networkSecurityConfig', 'networkSecurityConfig present');
 const debuggable = attr('debuggable');
 check(!debuggable || /false|0x0\b/.test(debuggable), 'not debuggable', `debuggable=${debuggable}`);
+
+// 5. Release signature. apksigner is a .bat on Windows, so it has to run through the shell.
+let certs = '';
+try {
+  certs = execFileSync(findApksigner(), ['verify', '--print-certs', apk], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+} catch (error) {
+  certs = '';
+  failures.push(`apksigner verify failed: ${error instanceof Error ? error.message.split(String.fromCharCode(10))[0] : error}`);
+}
+if (certs) {
+  const subject = /certificate DN: (.+)/.exec(certs)?.[1]?.trim() ?? 'unknown';
+  const sha256 = /certificate SHA-256 digest: ([0-9a-f]+)/.exec(certs)?.[1] ?? 'unknown';
+  check(!/CN=Android Debug/i.test(subject), `release-signed (${subject}; SHA-256 ${sha256})`, `signed with the Android debug key (${subject})`);
+}
 
 console.log(`verify-release: ${path.relative(root, apk)}  (package ${pkg})`);
 for (const n of notes) console.log(`  ${n}`);

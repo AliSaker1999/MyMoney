@@ -1,0 +1,51 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Onboarding flow
+# Tests: language selection, security, account creation, rate seeding
+
+- tapOn:
+    text: English
+- wait:
+    duration: 1000
+
+# Security step
+- tapOn:
+    text: Continue
+- wait:
+    duration: 1000
+
+# Account creation
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+- inputText: "My Test Account"
+- wait:
+    duration: 500
+
+- tapOn:
+    text: Continue
+- wait:
+    duration: 1000
+
+# Rate entry
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+- inputText: "1507.50"
+- wait:
+    duration: 500
+
+- tapOn:
+    text: Continue
+- wait:
+    duration: 1000
+
+# Verify onboarding complete (should be on dashboard)
+- assertVisible:
+    text: Dashboard

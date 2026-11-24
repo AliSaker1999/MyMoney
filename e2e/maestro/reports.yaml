@@ -1,0 +1,32 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Reports and Dashboard
+
+# Should start on dashboard
+- assertVisible:
+    text: Dashboard
+- wait:
+    duration: 500
+
+# Navigate to Reports
+- tapOn:
+    text: Reports
+- wait:
+    duration: 1000
+
+# Verify reports loaded
+- assertVisible:
+    text: Reports
+- wait:
+    duration: 500
+
+# Scroll to see expense chart
+- scroll:
+    direction: down
+    amount: 3
+- wait:
+    duration: 1000
+
+# Should see expense category data or empty state
+- assertVisible:
+    text: Expense
