@@ -1,0 +1,52 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Budgets flow
+
+# Navigate to Budgets (via More menu)
+- tapOn:
+    text: More
+- wait:
+    duration: 500
+
+- tapOn:
+    text: Budgets
+- wait:
+    duration: 1000
+
+# Create budget
+- tapOn:
+    text: Create new budget
+- wait:
+    duration: 500
+
+# Fill budget form - name/amount
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 0
+- inputText: "Food"
+- wait:
+    duration: 300
+
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 1
+- inputText: "500.00"
+- wait:
+    duration: 300
+
+- tapOn:
+    text: Create new budget
+- wait:
+    duration: 1000
+
+# Verify budget created
+- assertVisible:
+    text: Food

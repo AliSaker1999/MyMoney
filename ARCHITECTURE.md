@@ -1,12 +1,18 @@
 # My Money: Architecture (v2, approved)
 
-Offline-only personal finance app for Android (first) and iOS. USD and LBP, multiple accounts,
+Offline-only personal finance app for Android. USD and LBP, multiple accounts,
 reports, budgets, savings goals, debts, encrypted manual backup and restore.
 
 **Status:** v2 approved with amendments 1–4 and the M0 review notes (see [Decisions](#decisions)).
-**M0 is in progress (WIP).** See [STATUS.md](STATUS.md) for what is done and what remains. The
-compatibility report will be written to `docs/m0-compatibility-report.md` when the on-device spike
-has run.
+**M0 validation was formally accepted on 2026-11-18. M1–M4 were completed on
+2026-11-18.** See [STATUS.md](STATUS.md) for current progress and
+`docs/m0-compatibility-report.md` for M0 validation results.
+
+M0 tested a Xiaomi 13 Pro physical device on Android API 36 and a Google Play x86_64 emulator on
+API 34. The API 36.1 system image was installed, but its AVD was unstable, with System UI crashes
+and `surfaceflinger` aborts, and did not complete app-level validation. These are tested
+configurations, not a formally defined Android minimum or supported API range; no such support
+policy has been decided.
 
 Hard constraints: no backend, hosting, cloud database, Firebase, Supabase, paid APIs or
 analytics. Financial data never leaves the device except in a user-initiated, password-encrypted
@@ -25,10 +31,10 @@ backup file.
 | State | Redux Toolkit, limited to **RTK Query** (with `queryFn` calling repositories) and the `session` and `settings` slices |
 | UI | React Native Paper (MD3) with a custom theme |
 | Charts | `react-native-gifted-charts` (built on `react-native-svg`) |
-| Crypto | `expo-crypto` (random bytes, native AES-256-GCM) and `@noble/hashes` (scrypt only) |
+| Crypto | `expo-crypto` (random bytes, native AES-256-GCM), `@noble/hashes` (production scrypt); QuickCrypto is the preferred replacement candidate for evaluation, pending production acceptance |
 | Secrets | `expo-secure-store` (Android Keystore, iOS Keychain) |
 | App lock | `expo-local-authentication` (biometrics with device-passcode fallback), `expo-screen-capture` (FLAG_SECURE) |
-| i18n | `expo-localization`, `i18next`, `react-i18next` |
+| i18n | `expo-localization`, `intl-pluralrules`, `i18next`, `react-i18next` |
 | Validation | `zod` (backup files and form input at the boundaries) |
 | Builds | Development builds (`expo-dev-client`). Expo Go is not supported because SQLCipher is native code. |
 
@@ -52,6 +58,12 @@ src/security        key lifecycle, app lock, backup crypto
   invalidate RTK Query tags (`Account`, `Transaction`, `Report`, …).
 - **`DbDriver`** (`run`, `all`, `get`, `exec`, `exclusiveTransaction`) is the one deliberate
   abstraction. It lets the same repositories and migrations run on `better-sqlite3` in Jest.
+  Expo SDK 58's `withExclusiveTransactionAsync` opens a new connection and starts `BEGIN` before
+  its callback; that connection has no SQLCipher key, and foreign keys cannot be enabled inside an
+  active transaction. The Expo adapter therefore opens a separate connection, applies/verifies
+  SQLCipher, enables foreign keys and WAL, and then runs `BEGIN EXCLUSIVE`. A driver mutex
+  serializes all operations through the app's connection. This preserves the required keyed,
+  foreign-key-enforced exclusive writes without using that SDK helper.
 - **SQL registry (D1):** all SQL lives in `src/db/sql/*.sql.ts` as named, parameterized
   statements. Values are always bound. Business invariants live in SQL **views and triggers**.
   The **only** exception is `PRAGMA key` / `PRAGMA rekey` (`src/db/sqlcipherKey.ts`), which is
@@ -460,11 +472,14 @@ to biometrics, because biometric re-enrolment would destroy it. It is applied wi
 - Encryption protects bytes. The manifest protects against an incomplete or inconsistent dump.
 
 ### 10.2 KDF (amendment 2)
-- **Writing:** r = 8, p = 1, and N chosen in M0 from measured timings (decision M0-6):
-  - The test phone (Xiaomi 13 Pro) is a flagship, so its timings are a **best case**.
-  - Assume a budget phone is about **4× slower**; the write N must stay well under 5 s there.
-  - If the 13 Pro needs more than about **1 s at 2¹⁷**, use **2¹⁶**.
-  - Never below 2¹⁵. The chosen N and the numbers behind it go in the M0 report.
+- **Writing:** r = 8, p = 1. The approved conditional future target is **N = 131,072 (2¹⁷)**
+  with QuickCrypto, but only if its production acceptance gates pass and the owner approves the
+  production migration. This target does not approve QuickCrypto for production or select a
+  production write N today. Noble remains the active production implementation; its measured
+  timings do not meet the budget-phone performance target. Do not silently lower N as a workaround:
+  if QuickCrypto is not accepted, the owner must decide how to resolve the timing requirement.
+  The Xiaomi 13 Pro is a flagship, so its timings are a **best case**; the roughly **4× slower**
+  budget-phone estimate is not a substitute for testing representative budget devices.
 - **Reading:** accept only a power-of-two N with **2¹⁴ ≤ N ≤ 2¹⁷**, **r ≤ 8**, **p ≤ 1**,
   dkLen = 32 and a 16-byte salt. Anything else is rejected before any key derivation (this blocks
   a header crafted to exhaust memory).
@@ -514,6 +529,8 @@ to biometrics, because biometric re-enrolment would destroy it. It is applied wi
 - `expo-localization` + `i18next` + `react-i18next`. `en.json` and `ar.json` have typed keys,
   and a test checks that keys and placeholders match. Seeded categories and sources use
   `builtin_key`.
+- `intl-pluralrules` is imported before i18next initialization. Its bundled locale rules are
+  available offline, including Arabic cardinal categories.
 - The language defaults to the device language and is a device setting.
 - **RTL:** `I18nManager.allowRTL(true)` + `forceRTL(lang === 'ar')`, then `reloadAppAsync()` from
   `expo`. No `expo-updates`.
@@ -545,10 +562,13 @@ to biometrics, because biometric re-enrolment would destroy it. It is applied wi
 - **Dependencies:** an allowlist test, plus a list of never-allowed packages.
 - **Android release** (`APP_VARIANT=production`): `blockedPermissions` removes `INTERNET`,
   `ACCESS_NETWORK_STATE`, `SYSTEM_ALERT_WINDOW`, `READ/WRITE_EXTERNAL_STORAGE`, `VIBRATE`, and
-  `expo-screen-capture`'s `READ_MEDIA_IMAGES` and `DETECT_SCREEN_CAPTURE` (only its screenshot
-  *listener* needs those; FLAG_SECURE doesn't). Decision M0-4.
+  `expo-screen-capture`'s `READ_MEDIA_IMAGES`. `DETECT_SCREEN_CAPTURE` remains because the
+  Android screen-capture callback requires it, and expo-screen-capture registers that callback
+  when its native module loads. It is an install-time permission; Android may show its screenshot
+  notice when a screenshot is detected. Decision M0-4.
 - **`scripts/verify-release.mjs`** (amendment 3) checks the built APK with `aapt2`:
-  - The only permissions allowed are `USE_BIOMETRIC`, `USE_FINGERPRINT` and
+  - The only permissions allowed are `USE_BIOMETRIC`, `USE_FINGERPRINT`,
+    `DETECT_SCREEN_CAPTURE` and
     `<package>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
   - **Any other permission fails, and the report names the dependency that added it** (from
     Gradle's manifest-merger blame report).
@@ -589,31 +609,31 @@ to biometrics, because biometric re-enrolment would destroy it. It is applied wi
 
 | # | Milestone |
 |---|---|
-| M0 | Scaffold + compatibility spike. **In progress**: see [STATUS.md](STATUS.md) |
-| M1 | `domain/money` and the §7.8 tests |
-| M2 | DbDriver, migration runner, `0001`, SQL registry, triggers, views, migration tests |
-| M3 | i18n foundation (en/ar, RTL, formatters, lint rules) |
-| M4 | Security: key lifecycle K1–K4, recovery screen, app lock, FLAG_SECURE, overlay, privacy plugin, verify-release |
-| M5 | Onboarding |
-| M6 | Rate sources and rates |
-| M7 | Accounts, categories, opening balances |
-| M8 | Income, expense, refund, edit and delete |
-| M9 | Transfers + linked fees |
-| M10 | Dashboard, account ledger, Data Health |
-| M11 | Backup export |
-| M12 | Restore (journal and recovery) |
-| M13 | Reports and charts |
+| M0 | Scaffold + compatibility spike. **Complete and formally accepted 2026-11-18**: see [STATUS.md](STATUS.md) |
+| M1 | `domain/money` and the §7.8 tests — complete |
+| M2 | DbDriver, migration runner, `0001`, SQL registry, triggers, views, migration tests — complete |
+| M3 | i18n foundation (en/ar, RTL, formatters, lint rules) — complete |
+| M4 | Security: key lifecycle K1–K4, recovery screen, app lock, FLAG_SECURE, overlay, privacy plugin, verify-release — complete |
+| M5 | Onboarding — complete; encrypted-backup restore integration is deferred to M12 |
+| M6 | Rate sources and rates — complete |
+| M7 | Accounts, categories, opening balances — complete |
+| M8 | Income, expense, refund, edit and delete — complete |
+| M9 | Transfers + linked fees — complete |
+| M10 | Dashboard, account ledger, Data Health — complete |
+| M11 | Backup export — complete |
+| M12 | Restore (journal and recovery) — complete |
+| M13 | Reports and charts — complete |
 | M14 | Budgets |
 | M15 | Goals |
 | M16 | Debts |
-| M17 | Hardening, Maestro in both directions, performance with 100k entries, accessibility, signed Android release, iOS simulator compile check |
+| M17 | Hardening, Maestro in both directions, performance with 100k entries, accessibility, signed Android release |
 
 ## 16. Known risks and limitations
 
-1. iOS is compile-checked only (no Mac, no paid account). Keychain, Face ID, the RTL reload and
-   the iCloud ciphertext copy are not tested on a real iOS device.
-2. iOS device backups contain the encrypted DB as ciphertext. A full exclusion needs a native
-   module and is deferred.
+1. iOS is outside the Android-only first-release scope; no iOS build, dependencies, or release
+   validation are part of this assignment.
+2. Any future iOS release requires a separate owner decision and platform-specific security,
+   backup, and device validation.
 3. Unrecoverable by design: a lost backup password, or a lost or reset device without a backup.
    Mitigations: reminders, a "last backup" indicator, safety copies.
 4. better-sqlite3 (SQLite 3.54.1) differs from the device (SQLite 3.53.3 via SQLCipher). An
@@ -625,8 +645,9 @@ to biometrics, because biometric re-enrolment would destroy it. It is applied wi
 8. Arabic strings need review by a native speaker.
 9. Expo SDK churn: versions are pinned and upgraded only through `npx expo install --fix` plus the
    full test suite.
-10. The Android application id `app.mymoney` is provisional and must be confirmed before the first
-    Play upload.
+10. The Android application id is `com.alisaker.mymoney` (owner-confirmed 2026-11-24). It must never
+    change: installs and their encrypted data are tied to it. Release builds are signed by
+    `plugins/withReleaseSigning.js` with the owner's upload key, kept outside the repo.
 11. The only physical test phone is a flagship (Xiaomi 13 Pro, Snapdragon 8 Gen 2). Performance
     figures from it are best case. Budget-phone behaviour is estimated with the 4× rule, not
     measured.
@@ -645,10 +666,10 @@ Approved 2026-11-16.
 | D1 | SQL lives only in `src/db/sql/` as named, parameterized statements; logic goes in views and triggers. `PRAGMA key`/`rekey` is the only documented interpolation exception. (This replaces stored procedures, which SQLite doesn't have.) |
 | D2 | Project lives at `C:\dev\mymoney` (no spaces). |
 | D3 | LBP has 0 decimals, USD has 2. Rates are stored as LBP per USD × 10⁴. |
-| D4 | react-native-gifted-charts, `@noble/hashes` (scrypt only), `expo-crypto` AES-GCM, SQLCipher, all subject to M0 verification. `@noble/ciphers` was dropped. |
+| D4 | Keep react-native-gifted-charts, `@noble/hashes` (active production scrypt), `expo-crypto` AES-GCM, and SQLCipher. QuickCrypto remains unapproved for production until budget-device memory testing, release verification for every Android ABI to be distributed, APK distribution-size review, and explicit owner approval are complete. Before any future iOS release, complete iOS config/plugin, deployment-target, release, vector, and backup-interoperability checks. iOS is outside the Android-only first-release scope. `@noble/ciphers` was dropped. |
 | D5 | Redux Toolkit is limited to RTK Query and the session/settings slices. |
 | D6 | App lock is optional and on by default; biometrics with passcode fallback. |
-| D7 | Android first. No Apple fee for now. An iOS simulator compile check in M17 is enough. |
+| D7 | The first release is Android-only; iOS is outside its scope. Any future iOS release requires a separate owner decision and iOS validation before release. |
 | D8 | Default categories are seeded as `builtin_key` i18n keys. |
 | D9 | English and Arabic with RTL from the start. |
 | D10 | Restore is full replacement only in v1, with explicit confirmation and an automatic safety copy. |
@@ -659,11 +680,12 @@ Approved 2026-11-16.
 | A1 | Key lifecycle: never generate or overwrite an existing key; check safety/quarantine/replaced-* before creating a fresh DB; only typed-confirmation Reset replaces the key; tested (§9.1). |
 | A2 | Restore accepts only N ≤ 2¹⁷, r ≤ 8, p ≤ 1 (§10.2). |
 | A3 | verify-release allowlists `<package>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, fails on anything unexpected and names the dependency that added it. |
-| A4 | Date columns use `CHECK (date(col) IS col)` in addition to TypeScript validation. Verified on better-sqlite3 (all 19 cases); the on-device check is part of the M0 spike (pending). Note: `'now'` is rejected with "non-deterministic use of date() in a CHECK constraint" rather than "CHECK constraint failed"; both count as rejection. |
+| A4 | **Complete:** Date columns use `CHECK (date(col) IS col)` in addition to TypeScript validation. All 19 cases passed on better-sqlite3 and on the Xiaomi 13 Pro (API 36) and API 34 emulator. `'now'` is rejected with "non-deterministic use of date() in a CHECK constraint" rather than "CHECK constraint failed"; both count as rejection. |
 | M0-1 | Folder layout follows SDK 58's template: routes are in `src/app/` (not `app/`). |
 | M0-2 | Template packages removed as unneeded: `@expo/ui`, `expo-symbols`, `expo-glass-effect`, `expo-image`, `expo-web-browser`, `expo-device`, `react-dom`, `react-native-web`, `react-native-reanimated`, `react-native-worklets`. `@expo/vector-icons` was added (Paper's icon source). |
 | M0-3 | The `expo-sharing` config plugin (share-extension receiver) is **not** used; sending files through the share sheet doesn't need it. |
-| M0-4 | `expo-screen-capture`: only FLAG_SECURE is used. `READ_MEDIA_IMAGES` and `DETECT_SCREEN_CAPTURE` are blocked in release builds. If FLAG_SECURE turns out not to work without them, bring options (e.g. a tiny config plugin that sets FLAG_SECURE) instead of shipping those permissions. |
+| M0-4 | `expo-screen-capture`: only FLAG_SECURE is used. `READ_MEDIA_IMAGES` stays blocked; `DETECT_SCREEN_CAPTURE` is allowed because the Android callback is registered on module load and requires it. This may cause Android's screenshot notice when capture is detected. |
 | M0-5 | Corporate TLS: Node uses `--use-system-ca`; Java (Gradle client and daemon) uses `-Djavax.net.ssl.trustStoreType=Windows-ROOT`, per command or per script, never globally and never in committed Gradle files. Certificate verification is never disabled. npm `strict-ssl` must stay `true`, and `npm ci` is run only after `npm config get strict-ssl` prints `true`. |
-| M0-6 | scrypt write N: decided from M0 timings. The Xiaomi 13 Pro is a best case; assume a budget phone is ~4× slower and stay well under 5 s; if the 13 Pro takes more than ~1 s at 2¹⁷, use 2¹⁶. |
+| M0-6 | **Deferred pending production acceptance:** the approved conditional future write target is N = 131,072 (2¹⁷) with QuickCrypto, subject to all production gates and owner approval. Noble remains active in production; its timings do not meet the budget-phone goal. No production write N or KDF migration is approved by M0 completion. |
 | M0-7 | NDK: React Native 0.88 pins `ndkVersion = 27.1.12297006` (= NDK r27b). It is installed manually at `%LOCALAPPDATA%\Android\Sdk\ndk\27.1.12297006` (from `android-ndk-r27b-windows.zip`) instead of letting Gradle download it. |
+| M0-8 | **Benchmark complete; production acceptance pending:** QuickCrypto 1.1.9, Nitro Modules 0.33.2, and Quick Base64 3.0.0 were used for the Phase 1 benchmark only. They do not replace Noble in production; QuickCrypto remains a candidate pending the gates in D4 and owner approval. |

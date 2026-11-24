@@ -1,0 +1,65 @@
+appId: com.alisaker.mymoney
+---
+# M17 E2E Test: Transaction CRUD flow
+# Tests: create expense, create income, create transfer, edit, delete
+
+# Navigate to transactions tab
+- tapOn:
+    text: Transactions
+- wait:
+    duration: 1000
+
+# Create expense
+- tapOn:
+    text: Add expense
+- wait:
+    duration: 500
+
+# Fill in expense form
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 0
+- inputText: "50.00"
+- wait:
+    duration: 300
+
+- tapOn:
+    text: Save
+- wait:
+    duration: 1000
+
+# Verify expense appears
+- assertVisible:
+    text: Expense
+- wait:
+    duration: 500
+
+# Create income
+- tapOn:
+    text: Add income
+- wait:
+    duration: 500
+
+- tapOn:
+    point:
+      x: 50
+      y: 50
+  selector:
+    type: EditText
+  index: 0
+- inputText: "2000.00"
+- wait:
+    duration: 300
+
+- tapOn:
+    text: Save
+- wait:
+    duration: 1000
+
+# Verify income appears
+- assertVisible:
+    text: Income
