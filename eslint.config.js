@@ -36,6 +36,47 @@ module.exports = defineConfig([
         { object: 'window', property: 'fetch', message: 'Network APIs are banned.' },
       ],
       'no-restricted-imports': ['error', { paths: BANNED_IMPORTS }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Property[key.name='marginLeft']",
+          message: 'Use marginStart/marginEnd for correct RTL layout.',
+        },
+        {
+          selector: "Property[key.name='marginRight']",
+          message: 'Use marginStart/marginEnd for correct RTL layout.',
+        },
+        {
+          selector: "Property[key.name='paddingLeft']",
+          message: 'Use paddingStart/paddingEnd for correct RTL layout.',
+        },
+        {
+          selector: "Property[key.name='paddingRight']",
+          message: 'Use paddingStart/paddingEnd for correct RTL layout.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/domain/money/**/*.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        { name: 'parseFloat', message: 'Money parsing must use exact integer arithmetic.' },
+        { name: 'Number', message: 'Money calculations must remain in BigInt.' },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { property: 'toFixed', message: 'Money formatting must not round binary floats.' },
+        { object: 'Math', property: 'round', message: 'Use the approved half-even BigInt rounding.' },
+      ],
+    },
+  },
+  {
+    files: ['src/app/**/*.tsx', 'src/features/**/*.tsx', 'src/ui/**/*.tsx'],
+    ignores: ['src/app/spike.tsx'],
+    rules: {
+      'react/jsx-no-literals': 'error',
     },
   },
 ]);

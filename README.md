@@ -1,6 +1,6 @@
 # My Money
 
-Offline-only personal finance app (Android first, iOS-compatible). USD and LBP, multiple
+Offline-only personal finance app for the Android-only first release. USD and LBP, multiple
 accounts, reports, budgets, goals, debts, encrypted manual backups. There is no backend and no
 network access.
 
@@ -15,6 +15,37 @@ network access.
   `%ANDROID_HOME%\ndk\27.1.12297006`. Check that `source.properties` there shows
   `Pkg.Revision = 27.1.12297006`.
 - Development builds only. Expo Go is not supported because SQLCipher is native code.
+
+### Windows: clean install with Visual Studio 2026
+
+`better-sqlite3` (dev-only test engine) ships no prebuilt binaries and is always compiled with
+node-gyp. npm 10.9.x bundles node-gyp 11.2.0, which does not recognise Visual Studio 2026, and
+npm ignores `npm_config_node_gyp` / `--node-gyp` for install scripts. So on a PC whose only C++
+toolset is VS 2026, install like this, using node-gyp **12.4.0** pinned outside the project:
+
+```powershell
+npm install --prefix C:\dev\tools\node-gyp --save-exact node-gyp@12.4.0   # once per PC
+npm config get strict-ssl                                                  # must print: true
+npm ci --ignore-scripts
+npm rebuild @parcel/watcher
+Push-Location node_modules\better-sqlite3
+node C:\dev\tools\node-gyp\node_modules\node-gyp\bin\node-gyp.js rebuild --release
+Pop-Location
+```
+
+These are the only two packages in the lockfile with native build steps (`fsevents` is
+macOS-only). **Drop this section once npm bundles node-gyp 12.4 or newer**; a plain `npm ci`
+then works.
+
+### Windows: native build paths over 260 characters
+
+React Native codegen object paths exceed 260 characters, and the SDK's default CMake 3.22.1
+bundles ninja 1.10.2, which isn't long-path aware. Use **SDK CMake 3.31.6** (ninja 1.12.1) with
+Windows long paths enabled (`LongPathsEnabled = 1`). Install it once with
+`sdkmanager --install "cmake;3.31.6"` (add `SDKMANAGER_OPTS=-Djavax.net.ssl.trustStoreType=Windows-ROOT`
+behind TLS inspection). Then run `.\scripts\set-android-cmake.ps1` **after every `expo prebuild`**:
+it writes `cmake.dir` into `android/local.properties`, which `prebuild --clean` deletes. The release
+build script does this itself.
 
 ## Common commands (PowerShell)
 

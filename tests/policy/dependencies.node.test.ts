@@ -19,6 +19,10 @@ const APPROVED_RUNTIME = new Set([
   'react-native-gesture-handler',
   'react-native-safe-area-context',
   'react-native-screens',
+  // Phase 1 native scrypt benchmark only; Noble remains the production implementation.
+  'react-native-nitro-modules',
+  'react-native-quick-base64',
+  'react-native-quick-crypto',
   '@expo/vector-icons',
   // Approved in ARCHITECTURE.md §9
   'expo-sqlite',
@@ -31,6 +35,7 @@ const APPROVED_RUNTIME = new Set([
   'expo-dev-client',
   'expo-localization',
   'expo-screen-capture',
+  'intl-pluralrules',
   'i18next',
   'react-i18next',
   'react-native-paper',

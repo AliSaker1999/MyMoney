@@ -6,6 +6,8 @@
  *   mymoney://spike?rtl=on|off      force the layout direction, then reload the app (reloadAppAsync)
  *   mymoney://spike?secure=on|off   toggle FLAG_SECURE (expo-screen-capture)
  *   mymoney://spike?scrypt=0        skip the slow scrypt timings
+ *   mymoney://spike?scrypt=65536&kdf=quick  run one QuickCrypto measurement
+ *   mymoney://spike?backup=1&scrypt=0      test a synthetic backup-v1 envelope
  *
  * Chart values below are hard-coded spike samples, not user data.
  */
@@ -26,27 +28,27 @@ import {
   Switch,
   Text,
   TextInput,
+  useTheme,
 } from 'react-native-paper';
 
 import { spikeEnabled } from '@/spike/enabled';
 import { ResultRow } from '@/spike/ResultRow';
-import { persistResults, runSpike, type SpikeResult } from '@/spike/runSpike';
+import {
+  persistResults,
+  runSpike,
+  type SpikeResult,
+} from '@/spike/runSpike';
 
-const PIE = [
-  { value: 45, color: '#4E79A7', text: '45' },
-  { value: 30, color: '#F28E2B', text: '30' },
-  { value: 25, color: '#59A14F', text: '25' },
-];
-const BARS = [
-  { value: 12, label: 'A' },
-  { value: 7, label: 'B' },
-  { value: 15, label: 'C' },
-  { value: 9, label: 'D' },
-];
 const LINE = [{ value: 3 }, { value: 8 }, { value: 5 }, { value: 11 }, { value: 9 }];
 
 export default function SpikeScreen() {
-  const params = useLocalSearchParams<{ rtl?: string; secure?: string; scrypt?: string }>();
+  const params = useLocalSearchParams<{
+    rtl?: string;
+    secure?: string;
+    scrypt?: string;
+    kdf?: string;
+    backup?: string;
+  }>();
   const [results, setResults] = useState<SpikeResult[]>([]);
   const [running, setRunning] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -54,6 +56,35 @@ export default function SpikeScreen() {
   const [seg, setSeg] = useState('usd');
   const [text, setText] = useState('1,234.56');
   const started = useRef(false);
+  const theme = useTheme();
+  const chartTheme = theme.dark
+    ? {
+        background: theme.colors.surface,
+        axis: theme.colors.outline,
+        axisText: theme.colors.onSurfaceVariant,
+        grid: theme.colors.outlineVariant,
+        pieText: '#1C1B1F',
+        series: ['#93C5FD', '#FDBA74', '#86EFAC', '#D8B4FE'] as const,
+      }
+    : {
+        background: theme.colors.surface,
+        axis: theme.colors.outline,
+        axisText: theme.colors.onSurfaceVariant,
+        grid: theme.colors.outlineVariant,
+        pieText: '#FFFFFF',
+        series: ['#1D4ED8', '#B45309', '#15803D', '#7E22CE'] as const,
+      };
+  const pieData = [
+    { value: 45, color: chartTheme.series[0], text: '45' },
+    { value: 30, color: chartTheme.series[1], text: '30' },
+    { value: 25, color: chartTheme.series[2], text: '25' },
+  ];
+  const barData = [
+    { value: 12, label: 'A', frontColor: chartTheme.series[0] },
+    { value: 7, label: 'B', frontColor: chartTheme.series[1] },
+    { value: 15, label: 'C', frontColor: chartTheme.series[2] },
+    { value: 9, label: 'D', frontColor: chartTheme.series[3] },
+  ];
 
   // Direction switch driven by deep link: only reload when the direction actually changes.
   useEffect(() => {
@@ -79,12 +110,20 @@ export default function SpikeScreen() {
     setRunning(true);
     const acc: SpikeResult[] = [];
     setResults([]);
+    const supportedNs = [32768, 65536, 131072];
+    const selectedN = supportedNs.find((n) => params.scrypt === String(n));
     await runSpike(
       (r) => {
         acc.push(r);
         setResults([...acc]);
       },
-      { scryptNs: params.scrypt === '0' ? [] : [32768, 65536, 131072] },
+      {
+        scryptNs:
+          params.scrypt === '0' ? [] : selectedN === undefined ? supportedNs : [selectedN],
+        scryptImplementation: params.kdf === 'quick' ? 'quick' : 'noble',
+        scryptRepeats: params.kdf === 'quick' ? 8 : 1,
+        checkBackupCompatibility: params.backup === '1',
+      },
     );
     setSavedAt(persistResults(acc));
     setRunning(false);
@@ -174,9 +213,57 @@ export default function SpikeScreen() {
       <Card mode="outlined">
         <Card.Title title="react-native-gifted-charts" subtitle="spike sample values" />
         <Card.Content style={styles.gap}>
-          <PieChart data={PIE} donut showText textColor="#fff" radius={70} innerRadius={35} />
-          <BarChart data={BARS} barWidth={22} spacing={18} height={120} noOfSections={3} isAnimated={false} />
-          <LineChart data={LINE} height={120} spacing={40} curved isAnimated={false} />
+          <PieChart
+            data={pieData}
+            donut
+            showText
+            textColor={chartTheme.pieText}
+            textSize={13}
+            fontWeight="600"
+            backgroundColor={chartTheme.background}
+            radius={70}
+            innerRadius={35}
+          />
+          <BarChart
+            data={barData}
+            barWidth={22}
+            spacing={18}
+            height={150}
+            noOfSections={3}
+            isAnimated={false}
+            rtl={I18nManager.isRTL}
+            backgroundColor={chartTheme.background}
+            xAxisColor={chartTheme.axis}
+            yAxisColor={chartTheme.axis}
+            rulesColor={chartTheme.grid}
+            rulesThickness={1}
+            xAxisLabelTextStyle={{ color: chartTheme.axisText, fontSize: 12 }}
+            yAxisTextStyle={{ color: chartTheme.axisText, fontSize: 12 }}
+            xAxisThickness={1}
+            yAxisThickness={1}
+            yAxisLabelWidth={36}
+          />
+          <LineChart
+            data={LINE}
+            height={150}
+            spacing={40}
+            curved
+            isAnimated={false}
+            color={chartTheme.series[0]}
+            dataPointsColor={chartTheme.series[0]}
+            dataPointsRadius={4}
+            thickness={3}
+            backgroundColor={chartTheme.background}
+            xAxisColor={chartTheme.axis}
+            yAxisColor={chartTheme.axis}
+            rulesColor={chartTheme.grid}
+            rulesThickness={1}
+            xAxisLabelTextStyle={{ color: chartTheme.axisText, fontSize: 12 }}
+            yAxisTextStyle={{ color: chartTheme.axisText, fontSize: 12 }}
+            xAxisThickness={1}
+            yAxisThickness={1}
+            yAxisLabelWidth={36}
+          />
         </Card.Content>
       </Card>
     </ScrollView>
